@@ -730,6 +730,7 @@ static DEVICE_ATTR(sweep2wake, (S_IWUSR|S_IRUGO),
 	atmel_sweep2wake_show, atmel_sweep2wake_dump);
 #endif
 
+
 static struct kobject *android_touch_kobj;
 
 static int atmel_touch_sysfs_init(void)
@@ -1318,31 +1319,32 @@ static void multi_input_report(struct atmel_ts_data *ts)
 			}
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
       //left->right
-      if ((ts->finger_count == 1) && (scr_suspended == true) && (s2w_switch > 0)) {
-        prevx = 30;
-        nextx = 300;
+			if ((s2w_switch > 0) && (scr_suspended == true) && (ts->finger_count == 1)) {
+				printk(KERN_INFO "[sweep2wake_debug]: finger at x = %d\n", ts->finger_data[loop_i].x);
+				prevx = 0;
+				nextx = 333;
         if ((barrier[0] == true) ||
            ((ts->finger_data[loop_i].x > prevx) &&
             (ts->finger_data[loop_i].x < nextx) &&
             (ts->finger_data[loop_i].y > 950))) {
           if ((led_exec_count == true) && (scr_on_touch == false) && (s2w_switch == 2)) {
             pm8058_drvx_led_brightness_set(sweep2wake_leddev, 255);
-            printk(KERN_INFO "[sweep2wake]: activated button_backlight.\n");
+						printk(KERN_INFO "[sweep2wake]: activated button backlight.\n");
             led_exec_count = false;
           }
-          prevx = 300;
-          nextx = 680;
+					prevx = 333;
+					nextx = 667;
           barrier[0] = true;
           if ((barrier[1] == true) ||
              ((ts->finger_data[loop_i].x > prevx) &&
               (ts->finger_data[loop_i].x < nextx) &&
               (ts->finger_data[loop_i].y > 950))) {
-            prevx = 680;
+						prevx = 667;
             barrier[1] = true;
             if ((ts->finger_data[loop_i].x > prevx) &&
                 (ts->finger_data[loop_i].y > 950)) {
                 if (exec_count) {
-                  printk(KERN_INFO "[sweep2wake]: ON.\n");
+								printk(KERN_INFO "[sweep2wake]: POWER ON.\n");
                   sweep2wake_pwrtrigger();
                   exec_count = false;
                   break;
@@ -1351,27 +1353,27 @@ static void multi_input_report(struct atmel_ts_data *ts)
           }
         }
       //right->left
-      } else if ((ts->finger_count == 1) && (scr_suspended == false) && (s2w_switch > 0)) {
+			} else if ((s2w_switch > 0) && (scr_suspended == false) && (ts->finger_count == 1)) {
         scr_on_touch=true;
-        prevx = 1050;
-        nextx = 680;
+				prevx = 1000;
+				nextx = 667;
         if ((barrier[0] == true) ||
            ((ts->finger_data[loop_i].x < prevx) &&
             (ts->finger_data[loop_i].x > nextx) &&
             ( ts->finger_data[loop_i].y > 950))) {
-          prevx = 680;
-          nextx = 340;
+					prevx = 667;
+					nextx = 333;
           barrier[0] = true;
           if ((barrier[1] == true) ||
              ((ts->finger_data[loop_i].x < prevx) &&
               (ts->finger_data[loop_i].x > nextx) &&
               (ts->finger_data[loop_i].y > 950))) {
-            prevx = 340;
+						prevx = 333;
             barrier[1] = true;
             if ((ts->finger_data[loop_i].x < prevx) &&
                 (ts->finger_data[loop_i].y > 950)) {
                 if (exec_count) {
-                  printk(KERN_INFO "[sweep2wake]: OFF.\n");
+								printk(KERN_INFO "[sweep2wake]: POWER OFF.\n");
                   sweep2wake_pwrtrigger();
                   exec_count = false;
                   break;
@@ -1470,13 +1472,13 @@ static irqreturn_t atmel_irq_thread(int irq, void *ptr)
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
        /* if finger released, reset count & barriers */
       if ((((ts->finger_count > 0)?1:0) == 0) && (s2w_switch > 0)) {
-        if ((scr_suspended == 2) &&
+				if ((s2w_switch == 2) &&
 	    (scr_suspended == true) &&
             (led_exec_count == false) &&
             (scr_on_touch == false) &&
             (exec_count == true)) {
           pm8058_drvx_led_brightness_set(sweep2wake_leddev, 0);
-          printk(KERN_INFO "[sweep2wake]: deactivated button_backlight.\n");
+					printk(KERN_INFO "[sweep2wake]: deactivated button backlight.\n");
         }
         exec_count = true;
         led_exec_count = true;
@@ -1486,6 +1488,7 @@ static irqreturn_t atmel_irq_thread(int irq, void *ptr)
 	printk(KERN_INFO "[sweep2wake]: Finger released, reseting vars.\n");
       }
 #endif
+
 			if (ts->debug_log_level & 0x2)
 				printk(KERN_INFO "Finger leave\n");
 		} else {
@@ -1602,7 +1605,7 @@ static int wlc_tp_status_handler_func(struct notifier_block *this,
 	struct atmel_ts_data *ts;
 	int wlc_status;
 
-	wlc_status = connect_status > 0 ? CONNECTED : NONE;
+	wlc_status = connect_status ? CONNECTED : NONE;
 	printk(KERN_INFO "[TP]wireless charger %d\n", wlc_status);
 
 	ts = private_ts;
@@ -1697,7 +1700,7 @@ static void cable_tp_status_handler_func(int connect_status)
 	ts = private_ts;
 
 #if defined(CONFIG_ARCH_MSM8X60)
-	if (connect_status == 4 || (connect_status <= 0 && ts->wlc_status)) {
+	if (connect_status == 4 || (connect_status == 0 && ts->wlc_status)) {
 		wlc_tp_status_handler_func(NULL, connect_status == 4 ? 1 : 0, NULL);
 		return;
 	}
@@ -1706,8 +1709,7 @@ static void cable_tp_status_handler_func(int connect_status)
 	printk(KERN_INFO "[TP]cable change to %d\n", connect_status);
 
 	if (connect_status != ts->status) {
-		ts->status = connect_status > 0 ? CONNECTED : NONE;
-		printk(KERN_INFO "[TP]ts->status change to %d\n", ts->status);
+		ts->status = connect_status ? CONNECTED : NONE;
 		if (!ts->status && ts->wlc_status)
 			printk(KERN_INFO "[TP]ambigurous wireless charger state\n");
 		if (ts->config_setting[CONNECTED].config[0]) {
@@ -2155,7 +2157,7 @@ static int atmel_ts_probe(struct i2c_client *client,
 		cable_connect_type = cable_get_connect_type();
 		if (cable_connect_type == 4)
 			ts->wlc_status = CONNECTED;
-		else if (cable_connect_type > 0)
+		else if (cable_connect_type != 0)
 			ts->status = CONNECTED;
 #endif
 
@@ -2683,6 +2685,7 @@ static int atmel_ts_resume(struct i2c_client *client)
 				T6_CFG_CALIBRATE, 0x55);
 		}
 	}
+
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_SWEEP2WAKE
   	if (s2w_switch == 0) {
 #endif
@@ -2695,7 +2698,6 @@ static int atmel_ts_resume(struct i2c_client *client)
 		s2w_switch_changed = false;
 	}
 #endif
-
 	printk(KERN_INFO "%s:[TP]done\n", __func__);
 	return 0;
 }
