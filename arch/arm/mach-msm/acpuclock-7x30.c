@@ -127,6 +127,7 @@ static struct clkctl_acpu_speed acpu_freq_tbl[] = {
 	{ 0, 61440,  PLL_3,    5, 11, 61440000,  900, VDD_RAW(900) },
 	{ 0, 122880, PLL_3,    5, 5,  61440000,  900, VDD_RAW(900) },
 	{ 0, 184320, PLL_3,    5, 4,  61440000,  900, VDD_RAW(1000) },
+	{ 0, MAX_AXI_KHZ, AXI, 1, 0, 61440000, 900, VDD_RAW(900) },
 	{ 1, 245760, PLL_3,    5, 2,  61440000,  900, VDD_RAW(900) },
 	{ 1, 368640, PLL_3,    5, 1,  122800000, 900, VDD_RAW(900) },
 	{ 1, 460800,  PLL_1, 2, 0,  153600000, 900, VDD_RAW(900) },
@@ -465,13 +466,20 @@ static inline void setup_cpufreq_table(void) { }
 void __init pll2_fixup(void)
 {
 	struct clkctl_acpu_speed *speed = acpu_freq_tbl;
+	u8 pll2_l = readl_relaxed(PLL2_L_VAL_ADDR) & 0xFF;
 
 	for ( ; speed->acpu_clk_khz; speed++) {
 		if (speed->src != PLL_2)
 			backup_s = speed;
-
+    		if (speed->pll_rate && speed->pll_rate->l == pll2_l) {
+      		//speed++;
+      		//speed->acpu_clk_khz = 0;
+     		return;
+    		}
 	}
 
+	pr_err("Unknown PLL2 lval %d\n", pll2_l);
+	BUG();
 }
 
 #define RPM_BYPASS_MASK	(1 << 3)
