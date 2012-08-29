@@ -25,10 +25,6 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-#include <linux/leds-pm8058.h>
-#endif
-
 #define CY8C_I2C_RETRY_TIMES 10
 
 struct cy8c_ts_data {
@@ -77,67 +73,6 @@ static int cy8c_reset_baseline(void);
 
 static DEFINE_MUTEX(cy8c_mutex);
 
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-int s2w_switch = 1;
-bool scr_suspended = false, exec_count = true;
-bool scr_on_touch = false, led_exec_count = false, barrier[2] = {false, false};
-static struct input_dev * sweep2wake_pwrdev;
-static struct led_classdev * sweep2wake_leddev;
-static DEFINE_MUTEX(pwrlock);
-
-#ifdef CONFIG_CMDLINE_OPTIONS
-static int __init cy8c_read_s2w_cmdline(char *s2w)
-{
-	if (strcmp(s2w, "2") == 0) {
-		printk(KERN_INFO "[cmdline_s2w]: Sweep2Wake enabled. (No button backlight) | s2w='%s'", s2w);
-		s2w_switch = 2;
-	} else if (strcmp(s2w, "1") == 0) {
-		printk(KERN_INFO "[cmdline_s2w]: Sweep2Wake enabled. | s2w='%s'", s2w);
-		s2w_switch = 1;
-	} else if (strcmp(s2w, "0") == 0) {
-		printk(KERN_INFO "[cmdline_s2w]: Sweep2Wake disabled. | s2w='%s'", s2w);
-		s2w_switch = 0;
-	} else {
-		printk(KERN_INFO "[cmdline_s2w]: No valid input found. Sweep2Wake disabled. | s2w='%s'", s2w);
-		s2w_switch = 0;
-	}
-	return 1;
-}
-__setup("s2w=", cy8c_read_s2w_cmdline);
-#endif
-
-extern void sweep2wake_setdev(struct input_dev * input_device) {
-	sweep2wake_pwrdev = input_device;
-	return;
-}
-EXPORT_SYMBOL(sweep2wake_setdev);
-
-extern void sweep2wake_setleddev(struct led_classdev * led_dev) {
-	sweep2wake_leddev = led_dev;
-	return;
-}
-EXPORT_SYMBOL(sweep2wake_setleddev);
-
-static void sweep2wake_presspwr(struct work_struct * sweep2wake_presspwr_work) {
-	input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 1);
-	input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
-	msleep(100);
-	input_event(sweep2wake_pwrdev, EV_KEY, KEY_POWER, 0);
-	input_event(sweep2wake_pwrdev, EV_SYN, 0, 0);
-	msleep(100);
-	mutex_unlock(&pwrlock);
-	return;
-}
-static DECLARE_WORK(sweep2wake_presspwr_work, sweep2wake_presspwr);
-
-void sweep2wake_pwrtrigger(void) {
-	if (mutex_trylock(&pwrlock)) {
-		schedule_work(&sweep2wake_presspwr_work);
-	}
-	return;
-}
-#endif
-
 int i2c_cy8c_read(struct i2c_client *client, uint8_t addr, uint8_t *data, uint8_t length)
 {
 	int retry;
@@ -167,7 +102,7 @@ int i2c_cy8c_read(struct i2c_client *client, uint8_t addr, uint8_t *data, uint8_
 			msleep(10);
 	}
 	if (retry == CY8C_I2C_RETRY_TIMES) {
-		printk(KERN_INFO "i2c_read_block retry over %d\n",
+		printk(KERN_ERR "[TP] TOUCH_ERR: i2c_read_block retry over %d\n",
 			CY8C_I2C_RETRY_TIMES);
 
 		return -EIO;
@@ -205,7 +140,7 @@ int i2c_cy8c_write(struct i2c_client *client, uint8_t addr, uint8_t *data, uint8
 	}
 
 	if (retry == CY8C_I2C_RETRY_TIMES) {
-		printk(KERN_ERR "i2c_write_block retry over %d\n",
+		printk(KERN_ERR "[TP] TOUCH_ERR: i2c_write_block retry over %d\n",
 			CY8C_I2C_RETRY_TIMES);
 
 		return -EIO;
@@ -272,7 +207,7 @@ static ssize_t cy8c_register_show(struct device *dev,
 	if (ts_data->wake)
 		ts_data->wake();
 	if (i2c_cy8c_read(ts_data->client, cy8c_reg_addr, ptr, 1) < 0) {
-		printk(KERN_ERR "%s: read fail\n", __func__);
+		printk(KERN_DEBUG "[TP] %s: read fail\n", __func__);
 		return ret;
 	}
 	ret += sprintf(buf, "addr: %ld, data: %d\n", cy8c_reg_addr, ptr[0]);
@@ -293,19 +228,19 @@ static ssize_t cy8c_register_store(struct device *dev,
 		(buf[5] == ':' || buf[5] == '\n')) {
 		memcpy(buf_tmp, buf + 2, 3);
 		ret = strict_strtol(buf_tmp, 16, &cy8c_reg_addr);
-		printk(KERN_DEBUG "%s: set cy8c_reg_addr is: %ld\n",
+		printk(KERN_INFO "[TP] %s: set cy8c_reg_addr is: %ld\n",
 						__func__, cy8c_reg_addr);
 		if (buf[0] == 'w' && buf[5] == ':' && buf[9] == '\n') {
 			memcpy(buf_tmp, buf + 6, 3);
 			ret = strict_strtol(buf_tmp, 10, &write_da);
-			printk(KERN_DEBUG "write addr: 0x%lX, data: 0x%lX\n",
-						cy8c_reg_addr, write_da);
+			printk(KERN_INFO "[TP] %s: 0x%lX, data: 0x%lX\n",
+						__func__, cy8c_reg_addr, write_da);
 			if (ts_data->wake)
 				ts_data->wake();
 			ret = i2c_cy8c_write_byte_data(ts_data->client,
 						cy8c_reg_addr, write_da);
 			if (ret < 0) {
-				printk(KERN_ERR "%s: write fail(%d)\n",
+				printk(KERN_DEBUG "[TP] %s: write fail(%d)\n",
 								__func__, ret);
 			}
 		}
@@ -399,7 +334,7 @@ static ssize_t cy8c_diag_show(struct device *dev,
 			break;
 		msleep(20);
 	}
-	printk(KERN_DEBUG "[%d] change mode to %d\n", loop_i, ts_data->diag_command);
+	printk(KERN_DEBUG "[TP] %s(%d): change mode to %d\n", __func__, loop_i, ts_data->diag_command);
 	count += sprintf(buf, "Channel: %d * %d\n", ts_data->x_channel, ts_data->y_channel);
 
 	i2c_cy8c_read(ts_data->client, 0x00, &data[0], 7 + num_nodes);
@@ -442,7 +377,7 @@ static ssize_t cy8c_diag_dump(struct device *dev,
 		ts_data->diag_command = buf[0] - 0x2D;
 	else
 		ts_data->diag_command = 0;
-	printk(KERN_INFO "ts_data->diag_command = %X\n",  ts_data->diag_command);
+	printk(KERN_INFO "[TP] %s: ts_data->diag_command = %X\n", __func__,  ts_data->diag_command);
 	return count;
 }
 
@@ -476,7 +411,7 @@ static ssize_t cy8c_cal_show(struct device *dev,
 	}
 
 	i2c_cy8c_read(ts_data->client, 0x00, &data[0], 1);
-	printk(KERN_INFO "[cal_show]change mode to 0x%X\n", data[0]);
+	printk(KERN_INFO "[TP] %s: change mode to 0x%X\n", __func__, data[0]);
 
 	i2c_cy8c_read(ts_data->client, 0x00, &data[0], 7 + num_nodes);
 	if ((data[1] & 0x40) == 0x40) {
@@ -512,7 +447,7 @@ static ssize_t cy8c_cal_show(struct device *dev,
 	mdelay(64);
 
 	i2c_cy8c_read(ts_data->client, 0x00, &data[0], 2);
-	printk(KERN_INFO "[cal_show]change mode to 0x%X 0x%X\n", data[0], data[1]);
+	printk(KERN_INFO "[TP] %s: change mode to 0x%X 0x%X\n", __func__, data[0], data[1]);
 	enable_irq(ts_data->client->irq);
 	return count;
 }
@@ -531,7 +466,7 @@ static ssize_t cy8c_cal_store(struct device *dev,
 			ts_data->wake();
 		i2c_cy8c_read(ts_data->client, 0x00, data, 2);
 		if ((data[1] & 0x10) == 0x10) {
-			printk(KERN_INFO "Bootloader mode to OP mode2\n");
+			printk(KERN_INFO "[TP] Bootloader mode to OP mode2\n");
 			cy8c_init_panel(ts_data);
 		}
 
@@ -539,7 +474,7 @@ static ssize_t cy8c_cal_store(struct device *dev,
 
 		if (!i2c_cy8c_read(ts_data->client, 0x00, data, 3)) {
 			if ((data[2] & 0x0F) >= 1) {
-				printk(KERN_INFO "[cal_store]Number of touches %d\n", data[2] & 0x0F);
+				printk(KERN_INFO "[TP] %s: Number of touches %d\n", __func__, data[2] & 0x0F);
 				enable_irq(ts_data->client->irq);
 				return count;
 			}
@@ -557,8 +492,8 @@ static ssize_t cy8c_cal_store(struct device *dev,
 			for (loop_i = 0; loop_i < 100; loop_i++) {
 				i2c_cy8c_read(ts_data->client, 0x00, data, 3);
 				if (data[1] == 0x86) {
-					printk(KERN_INFO "[cal_store][%d]status return 0x%X\n",
-						loop_i + 1, data[1]);
+					printk(KERN_INFO "[TP] %s(%d): status return 0x%X\n",
+						__func__, loop_i + 1, data[1]);
 					break;
 				} else
 					mdelay(10);
@@ -574,7 +509,7 @@ static ssize_t cy8c_cal_store(struct device *dev,
 		}
 
 		if (!i2c_cy8c_read(ts_data->client, 0x00, &data[0], 2))
-			printk(KERN_INFO "[cal_store]change mode to 0x%X 0x%X\n", data[0], data[1]);
+			printk(KERN_INFO "[TP] %s: change mode to 0x%X 0x%X\n", __func__, data[0], data[1]);
 
 		enable_irq(ts_data->client->irq);
 	}
@@ -592,11 +527,11 @@ static ssize_t cy8c_unlock_store(struct device *dev,
 	ts_data = private_ts;
 
 	if (!sscanf(buf, "%d", &unlock)) {
-		printk(KERN_INFO "cy8c_unlock_store sscanf return failed\n");
+		printk(KERN_DEBUG "[TP] cy8c_unlock_store sscanf return failed\n");
 		return count;
 	}
 
-	printk(KERN_INFO "Touch: unlock change to (%d %d %d)\n", unlock, ts_data->finger_count, ts_data->unlock_attr);
+	printk(KERN_INFO "[TP] Touch: unlock change to (%d %d %d)\n", unlock, ts_data->finger_count, ts_data->unlock_attr);
 	if (unlock == 1 && ts_data->unlock_attr)
 		ts_data->unlock_page = 1;
 
@@ -635,31 +570,6 @@ static ssize_t cy8c_hw_reset(struct device *dev,
 static DEVICE_ATTR(hw_reset, S_IWUSR,
 	NULL, cy8c_hw_reset);
 
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-static ssize_t cy8c_sweep2wake_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	size_t count = 0;
-
-	count += sprintf(buf, "%d\n", s2w_switch);
-
-	return count;
-}
-
-static ssize_t cy8c_sweep2wake_dump(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	if (buf[0] >= '0' && buf[0] <= '2' && buf[1] == '\n')
-		if (s2w_switch != buf[0] - '0')
-		s2w_switch = buf[0] - '0';
-
-	return count;
-}
-
-static DEVICE_ATTR(sweep2wake, (S_IWUSR|S_IRUGO),
-	cy8c_sweep2wake_show, cy8c_sweep2wake_dump);
-#endif
-
 static struct kobject *android_touch_kobj;
 
 static int cy8c_touch_sysfs_init(void)
@@ -667,61 +577,54 @@ static int cy8c_touch_sysfs_init(void)
 	int ret;
 	android_touch_kobj = kobject_create_and_add("android_touch", NULL);
 	if (android_touch_kobj == NULL) {
-		printk(KERN_ERR "%s: subsystem_register failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: subsystem_register failed\n", __func__);
 		ret = -ENOMEM;
 		return ret;
 	}
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	ret = sysfs_create_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
-	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
-		return ret;
-	}
-#endif
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_vendor.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	cy8c_reg_addr = 0;
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_register.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_debug_level.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_diag.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_calibration.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_htc_event.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_unlock.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_hw_reset.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_attn.attr);
 	if (ret) {
-		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s: sysfs_create_file failed\n", __func__);
 		return ret;
 	}
 	return 0;
@@ -729,9 +632,6 @@ static int cy8c_touch_sysfs_init(void)
 
 static void cy8c_touch_sysfs_deinit(void)
 {
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	sysfs_remove_file(android_touch_kobj, &dev_attr_sweep2wake.attr);
-#endif
 	sysfs_remove_file(android_touch_kobj, &dev_attr_diag.attr);
 	sysfs_remove_file(android_touch_kobj, &dev_attr_debug_level.attr);
 	sysfs_remove_file(android_touch_kobj, &dev_attr_register.attr);
@@ -749,7 +649,7 @@ static int cy8c_init_panel(struct cy8c_ts_data *ts)
 	uint8_t buf = 0, loop_i;
 	uint8_t sec_key[] = {0x00, 0xFF, 0xA5, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
 	if (i2c_cy8c_write(ts->client, 0x00, sec_key, 11) < 0) {
-		printk(KERN_ERR "TOUCH_ERR: init failed to system info mode\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: init failed to system info mode\n");
 		return -1;
 	}
 	msleep(80);
@@ -760,7 +660,7 @@ static int cy8c_init_panel(struct cy8c_ts_data *ts)
 	}
 	if (!ts->id)
 		if (i2c_cy8c_read(ts->client, 0x17, &ts->id, 1) < 0) {
-			printk(KERN_ERR "TOUCH_ERR: init failed to check id\n");
+			printk(KERN_ERR "[TP] TOUCH_ERR: init failed to check id\n");
 			return -1;
 		}
 	if (ts->timeout)
@@ -785,17 +685,17 @@ static int cy8c_reset_baseline(void)
 
 	i2c_cy8c_read(ts_data->client, 0x00, data, 2);
 	if ((data[1] & 0x10) == 0x10) {
-		printk(KERN_INFO "Bootloader mode to OP mode3\n");
+		printk(KERN_INFO "[TP] Bootloader mode to OP mode3\n");
 		cy8c_init_panel(ts_data);
 	}
 	i2c_cy8c_read(ts_data->client, 0x1B, &data[0], 1);
 	if ((data[0] & 0x01) == 0) {
 		i2c_cy8c_write_byte_data(ts_data->client, 0x1B,
 		(data[0] | 0x01));
-		printk(KERN_INFO "[TOUCH] cy8c reset baseline\n");
+		printk(KERN_INFO "[TP] cy8c reset baseline\n");
 		return 0;
 	} else {
-		printk(KERN_INFO "[TOUCH] cy8c reset baseline bypass\n");
+		printk(KERN_INFO "[TP] cy8c reset baseline bypass\n");
 		return 1;
 	}
 }
@@ -814,9 +714,7 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 {
 	struct cy8c_ts_data *ts = ptr;
 	uint8_t buf[32] = {0}, loop_i, loop_j;
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	int prevx = 0, nextx = 0;
-#endif
+
 	i2c_cy8c_read(ts->client, 0x00, buf, 32);
 	if (ts->debug_log_level & 0x1) {
 		for (loop_i = 0; loop_i < 32; loop_i++) {
@@ -827,14 +725,14 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 	}
 
 	if ((buf[1] & 0x10) == 0x10) {
-		printk(KERN_INFO "Bootloader mode to OP mode\n");
+		printk(KERN_INFO "[TP] Bootloader mode to OP mode\n");
 		if (cy8c_init_panel(ts) < 0)
-			printk(KERN_ERR "TOUCH_ERR: %s init failed\n",
+			printk(KERN_ERR "[TP] TOUCH_ERR: %s init failed\n",
 			__func__);
 	}
 
 	if (buf[2] & 0x10)
-		printk(KERN_INFO "[TOUCH] cy8c large object detected | buf[2]: '%i'\n", buf[2]);
+		printk(KERN_INFO "[TP] cy8c large object detected\n");
 	if ((buf[2] & 0x0F) >= 1) {
 		int base = 0x03;
 		int report = -1;
@@ -844,7 +742,7 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 		ts->finger_count = ((buf[2] & 0x0F) > 4) ? 4 : buf[2] & 0x0F;
 		ts->finger_id = buf[8] << 8 | buf[21];
 		if (ts->debug_log_level & 0x4)
-			printk(KERN_INFO "Finger ID: %X, count: %d\n",
+			printk(KERN_INFO "[TP] Finger ID: %X, count: %d\n",
 				ts->finger_id, ts->finger_count);
 		if (ts->p_finger_count && (ts->finger_count != ts->p_finger_count ||
 			ts->finger_id != ts->p_finger_id)) {
@@ -855,7 +753,7 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 				loop_i > 0; loop_i--) {
 				for (loop_j = ts->p_finger_count; loop_j > 0; loop_j--) {
 					if (ts->debug_log_level & 0x4)
-						printk(KERN_INFO "i = %d, j = %d, A = %X, B = %X\n",
+						printk(KERN_INFO "[TP] i = %d, j = %d, A = %X, B = %X\n",
 							loop_i, loop_j, ((ts->finger_id >> (16 - 4 * loop_i)) & 0x000F),
 							((ts->p_finger_id >> (16 - 4 * loop_j)) & 0x000F));
 
@@ -907,16 +805,16 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 
 		if (ts->ambiguous_state == ts->finger_count
 			|| ts->ambiguous_state == report) {
-			if (ts->flag_htc_event == 0) {
+			if (ts->flag_htc_event == 0)
 				input_mt_sync(ts->input_dev);
-			} else {
+			else {
 				input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE, 0);
 				input_report_abs(ts->input_dev, ABS_MT_POSITION, 1 << 31);
 			}
 		} else {
 		if (report >= 0) {
 			if (ts->debug_log_level & 0x4)
-				printk(KERN_INFO "Change: %d\n", report);
+				printk(KERN_INFO "[TP] Change: %d\n", report);
 			if (report == 0) {
 				if (ts->flag_htc_event == 0) {
 					input_mt_sync(ts->input_dev);
@@ -957,7 +855,7 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 								| finger_data[loop_i][0] << 16 | finger_data[loop_i][1]);
 						}
 						if (ts->debug_log_level & 0x2)
-							printk(KERN_INFO "Finger %d=> X:%d, Y:%d w:%d, z:%d\n",
+							printk(KERN_INFO "[TP] Finger %d=> X:%d, Y:%d w:%d, z:%d\n",
 								loop_i + 1, finger_data[loop_i][0], finger_data[loop_i][1],
 								finger_data[loop_i][2], finger_data[loop_i][2]);
 					}
@@ -968,9 +866,6 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 
 			base = 3;
 		}
-
-		/* reset sameFilter */
-		ts->sameFilter[2] = ts->sameFilter[0] = ts->sameFilter[1] = -1;
 
 		for (loop_i = 0; loop_i < ts->finger_count; loop_i++) {
 			if (!(ts->grip_suppression & BIT(loop_i))) {
@@ -1002,92 +897,24 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 						| finger_data[loop_i][0] << 16 | finger_data[loop_i][1]);
 				}
 				if (ts->debug_log_level & 0x2)
-					printk(KERN_INFO "Finger %d=> X:%d, Y:%d w:%d, z:%d\n",
+					printk(KERN_INFO "[TP] Finger %d=> X:%d, Y:%d w:%d, z:%d\n",
 						loop_i + 1, finger_data[loop_i][0], finger_data[loop_i][1],
 						finger_data[loop_i][2], finger_data[loop_i][2]);
 				}
 				if (!ts->first_pressed) {
 					ts->first_pressed = 1;
-					printk(KERN_INFO "S1@%d,%d\n",
+					printk(KERN_INFO "[TP] S1@%d,%d\n",
 						finger_data[0][0], finger_data[0][1]);
 				}
 				if (ts->first_pressed == 1) {
 					ts->pre_finger_data[0] = finger_data[0][0];
 					ts->pre_finger_data[1] = finger_data[0][1];
 				}
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-				//left->right
-				if ((ts->finger_count == 1) && (scr_suspended == true) && (s2w_switch > 0)) {
-					prevx = 30;
-					nextx = 300;
-					if ((barrier[0] == true) ||
-					   ((finger_data[loop_i][0] > prevx) &&
-					    (finger_data[loop_i][0] < nextx) &&
-					    (finger_data[loop_i][1] > 950))) {
-						if ((led_exec_count == true) && (scr_on_touch == false) && (s2w_switch != 2)) {
-							pm8058_drvx_led_brightness_set(sweep2wake_leddev, 255);
-							printk(KERN_INFO "[sweep2wake]: activated button_backlight");
-							led_exec_count = false;
-						}
-						prevx = 300;
-						nextx = 680;
-								barrier[0] = true;
-						if ((barrier[1] == true) ||
-						   ((finger_data[loop_i][0] > prevx) &&
-						    (finger_data[loop_i][0] < nextx) &&
-						    (finger_data[loop_i][1] > 950))) {
-							prevx = 680;
-									barrier[1] = true;
-							if ((finger_data[loop_i][0] > prevx) &&
-							    (finger_data[loop_i][1] > 950)) {
-								if (finger_data[loop_i][0] > 840) {
-											if (exec_count) {
-										printk(KERN_INFO "[sweep2wake]: ON");
-										sweep2wake_pwrtrigger();
-												exec_count = false;
-												break;
-											}
-										}
-									}
-								}
-							}
-				//right->left
-				} else if ((ts->finger_count == 1) && (scr_suspended == false) && (s2w_switch > 0)) {
-					scr_on_touch=true;
-					prevx = 1050;
-							nextx = 680;
-					if ((barrier[0] == true) ||
-					   ((finger_data[loop_i][0] < prevx) &&
-					    (finger_data[loop_i][0] > nextx) &&
-					    ( finger_data[loop_i][1] > 950))) {
-								prevx = 680;
-								nextx = 340;
-								barrier[0] = true;
-						if ((barrier[1] == true) ||
-						   ((finger_data[loop_i][0] < prevx) &&
-						    (finger_data[loop_i][0] > nextx) &&
-						    (finger_data[loop_i][1] > 950))) {
-									prevx = 340;
-									barrier[1] = true;
-							if ((finger_data[loop_i][0] < prevx) &&
-							    (finger_data[loop_i][1] > 950)) {
-								if (finger_data[loop_i][0] < 250) {
-											if (exec_count) {
-										printk(KERN_INFO "[sweep2wake]: OFF");
-										sweep2wake_pwrtrigger();
-												exec_count = false;
-												break;
-											}
-										}
-									}
-								}
-							}
-						}
-#endif
 					}
 		}
 		if ((ts->unlock_page) &&
-			(ts->finger_count == 4)) {
+			((ts->p_finger_count > ts->finger_count) ||
+			(ts->finger_count == 4))) {
 			cy8c_reset_baseline();
 		}
 	} else {
@@ -1105,36 +932,17 @@ static irqreturn_t cy8c_ts_irq_thread(int irq, void *ptr)
 		}
 		if (ts->first_pressed == 1) {
 			ts->first_pressed = 2;
-			printk(KERN_INFO "E%d@%d, %d\n",
+			printk(KERN_INFO "[TP] E%d@%d, %d\n",
 				(ts->finger_id >> 12) & 0x000F,
 				ts->pre_finger_data[0] , ts->pre_finger_data[1]);
 		}
 
 		if (ts->debug_log_level & 0x2)
-			printk(KERN_INFO "Finger leave\n");
+			printk(KERN_INFO "[TP] Finger leave\n");
 	}
 	if (ts->flag_htc_event == 0) {
 		input_report_key(ts->input_dev, BTN_TOUCH, (ts->finger_count > 0)?1:0);
 		input_sync(ts->input_dev);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-		 /* if finger released, reset count & barriers */
-		if ((((ts->finger_count > 0)?1:0) == 0) && (s2w_switch > 0)) {
-			if ((s2w_switch != 2) &&
-			    (scr_suspended == true) &&
-			    (led_exec_count == false) &&
-			    (ts->suspend == 1) &&
-			    (scr_on_touch == false) &&
-			    (exec_count == true)) {
-				pm8058_drvx_led_brightness_set(sweep2wake_leddev, 0);
-				printk(KERN_INFO "[sweep2wake]: deactivated button_backlight");
-			}
-			exec_count = true;
-			led_exec_count = true;
-			barrier[0] = false;
-			barrier[1] = false;
-			scr_on_touch = false;
-		}
-#endif
 	}
 
 	return IRQ_HANDLED;
@@ -1147,17 +955,17 @@ static int cy8c_ts_probe(struct i2c_client *client,
 	struct cy8c_i2c_platform_data *pdata;
 	int ret = 0;
 	uint8_t buf[6] = {0};
-	printk(KERN_DEBUG "%s: enter\n", __func__);
+	printk(KERN_DEBUG "[TP] %s: enter\n", __func__);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
-		dev_err(&client->dev, "need I2C_FUNC_I2C\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: need I2C_FUNC_I2C\n");
 		ret = -ENODEV;
 		goto err_check_functionality_failed;
 	}
 
 	ts = kzalloc(sizeof(struct cy8c_ts_data), GFP_KERNEL);
 	if (ts == NULL) {
-		dev_err(&client->dev, "allocate cy8c_ts_data failed\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: allocate cy8c_ts_data failed\n");
 		ret = -ENOMEM;
 		goto err_alloc_data_failed;
 	}
@@ -1172,13 +980,13 @@ static int cy8c_ts_probe(struct i2c_client *client,
 		ret = ts->power(1);
 		msleep(10);
 		if (ret < 0) {
-			dev_err(&client->dev, "power on failed\n");
+			printk(KERN_ERR "[TP] TOUCH_ERR: power on failed\n");
 			goto err_power_failed;
 		}
 	}
 	ret = i2c_cy8c_read(ts->client, 0x01, buf, 2);
 	if (ret < 0) {
-		dev_info(&client->dev, "No Cypress chip found\n");
+		printk(KERN_DEBUG "[TP] No Cypress chip found\n");
 		goto err_detect_failed;
 	}
 	if ((buf[0] & 0x10) != 0x10) {
@@ -1189,10 +997,10 @@ static int cy8c_ts_probe(struct i2c_client *client,
 
 	ret = i2c_cy8c_read(ts->client, 0x0B, &buf[2], 4);
 	if (ret < 0) {
-		dev_err(&client->dev, "TOUCH_ERR: Cypress chip abnormal\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: Cypress chip abnormal\n");
 		goto err_detect_failed;
 	}
-	dev_info(&client->dev, "buf: %x, %x, %x, %x\n", buf[0], buf[1], buf[2], buf[3]);
+	printk(KERN_INFO "[TP] buf: %x, %x, %x, %x\n", buf[0], buf[1], buf[2], buf[3]);
 
 	ts->version = buf[2] << 8 | buf[3];
 	if ((buf[4] + buf[5]) <= 32) {
@@ -1202,11 +1010,11 @@ static int cy8c_ts_probe(struct i2c_client *client,
 		ts->x_channel = 21;
 		ts->y_channel = 11;
 	}
-	dev_info(&client->dev,
+	printk(KERN_INFO "[TP] "
 		"application verion = %X, x_channel = %X, y_channel = %X\n",
 		ts->version, ts->x_channel, ts->y_channel);
 	if (cy8c_init_panel(ts) < 0)
-		printk(KERN_ERR "TOUCH_ERR: %s init failed\n",
+		printk(KERN_ERR "[TP] TOUCH_ERR: %s init failed\n",
 		__func__);
 
 	if (pdata) {
@@ -1231,7 +1039,7 @@ static int cy8c_ts_probe(struct i2c_client *client,
 	ts->input_dev = input_allocate_device();
 	if (ts->input_dev == NULL) {
 		ret = -ENOMEM;
-		dev_err(&client->dev, "TOUCH_ERR: Failed to allocate input device\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: Failed to allocate input device\n");
 		goto err_input_dev_alloc_failed;
 	}
 	ts->input_dev->name = "cy8c-touchscreen";
@@ -1248,7 +1056,7 @@ static int cy8c_ts_probe(struct i2c_client *client,
 	set_bit(KEY_SEARCH, ts->input_dev->keybit);
 	set_bit(BTN_TOUCH, ts->input_dev->keybit);
 	if (pdata) {
-		printk(KERN_INFO "input_set_abs_params: mix_x %d, max_x %d, min_y %d, max_y %d\n",
+		printk(KERN_INFO "[TP] input_set_abs_params: mix_x %d, max_x %d, min_y %d, max_y %d\n",
 			pdata->abs_x_min, pdata->abs_x_max, pdata->abs_y_min, pdata->abs_y_max);
 
 		input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X,
@@ -1270,8 +1078,7 @@ static int cy8c_ts_probe(struct i2c_client *client,
 
 	ret = input_register_device(ts->input_dev);
 	if (ret) {
-		dev_err(&client->dev,
-			"TOUCH_ERR: Unable to register %s input device\n",
+		printk(KERN_ERR "[TP] TOUCH_ERR: Unable to register %s input device\n",
 			ts->input_dev->name);
 		goto err_input_register_device_failed;
 	}
@@ -1279,8 +1086,8 @@ static int cy8c_ts_probe(struct i2c_client *client,
 	ret = request_threaded_irq(client->irq, NULL, cy8c_ts_irq_thread,
 			  IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "cy8c_ts", ts);
 	if (ret != 0) {
-		dev_err(&client->dev, "TOUCH_ERR: request_irq failed\n");
-		dev_err(&client->dev, "TOUCH_ERR: don't support method without irq\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: request_irq failed\n");
+		printk(KERN_ERR "[TP] TOUCH_ERR: don't support method without irq\n");
 		goto err_input_register_device_failed;
 	}
 
@@ -1291,7 +1098,7 @@ static int cy8c_ts_probe(struct i2c_client *client,
 	register_early_suspend(&ts->early_suspend);
 #endif
 
-	dev_info(&client->dev, "Start touchscreen %s in %s mode\n",
+	printk(KERN_INFO "[TP] Start touchscreen %s in %s mode\n",
 		 ts->input_dev->name, "interrupt");
 
 	ts->flag_htc_event = 0;
@@ -1334,25 +1141,7 @@ static int cy8c_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 	struct cy8c_ts_data *ts = i2c_get_clientdata(client);
 	uint8_t buf[2] = {0};
 
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	if (s2w_switch > 0) {
-		//screen off, enable_irq_wake
-	scr_suspended = true;
-	enable_irq_wake(client->irq);
-		if ((s2w_switch != 2) && (ts->suspend == 0)) {
-			//ensure backlight is turned off
-			pm8058_drvx_led_brightness_set(sweep2wake_leddev, 0);
-			printk(KERN_INFO "[sweep2wake]: deactivated button_backlight | suspend");
-		}
-	}
-#endif
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	if (s2w_switch == 0) {
-#endif
 		disable_irq_nosync(client->irq);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	}
-#endif
 
 	if (!ts->p_finger_count) {
 		if (ts->wake)
@@ -1361,7 +1150,7 @@ static int cy8c_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 			cy8c_data_toggle(ts);
 	}
 	if (!i2c_cy8c_read(ts->client, 0x00, buf, 2))
-		printk(KERN_INFO "%s: %x, %x\n", __func__, buf[0], buf[1]);
+		printk(KERN_INFO "[TP] %s: %x, %x\n", __func__, buf[0], buf[1]);
 
 	ts->first_pressed = 0;
 	ts->grip_suppression = 0;
@@ -1371,19 +1160,12 @@ static int cy8c_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 
 	if ((buf[1] & 0x10) == 0x10)
 		if (cy8c_init_panel(ts) < 0)
-			printk(KERN_ERR "TOUCH_ERR: %s init failed\n",
+			printk(KERN_ERR "[TP] TOUCH_ERR: %s init failed\n",
 			__func__);
 	if (buf[0] & 0x70)
 		i2c_cy8c_write_byte_data(ts->client, 0x00, buf[0] & 0x8F);
-
 	mutex_lock(&cy8c_mutex);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	if (s2w_switch == 0) {
-#endif
 		i2c_cy8c_write_byte_data(ts->client, 0x00, (buf[0] & 0x8F) | 0x02);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	}
-#endif
 	ts->suspend = 1;
 	mutex_unlock(&cy8c_mutex);
 
@@ -1394,35 +1176,15 @@ static int cy8c_ts_resume(struct i2c_client *client)
 {
 	struct cy8c_ts_data *ts = i2c_get_clientdata(client);
 	uint8_t buf[2] = {0};
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	if (s2w_switch > 0) {
-		/* HW revision fix, this is not needed for all touch controllers!
-		 *
-		 * suspend me for a short while, so that resume can wake me up the right way
-		 */
-		i2c_cy8c_read(ts->client, 0x00, buf, 2);
-		if (buf[0] & 0x70)
-			i2c_cy8c_write_byte_data(ts->client, 0x00, buf[0] & 0x8F);
-		mutex_lock(&cy8c_mutex);
-		i2c_cy8c_write_byte_data(ts->client, 0x00, (buf[0] & 0x8F) | 0x02);
-		mutex_unlock(&cy8c_mutex);
-		msleep(100);
-		buf[0] = 0;
-		buf[1] = 0;
-		//screen on, disable_irq_wake
-	scr_suspended = false;
-	disable_irq_wake(client->irq);
-	}
-#endif
 
 	if (ts->wake)
 		ts->wake();
 	ts->suspend = 0;
 
 	if (!i2c_cy8c_read(ts->client, 0x00, buf, 2))
-		printk(KERN_INFO "%s: %x, %x\n", __func__, buf[0], buf[1]);
+		printk(KERN_INFO "[TP] %s: %x, %x\n", __func__, buf[0], buf[1]);
 	else if (ts->auto_reset && ts->reset) {
-		printk(KERN_INFO "%s: [TP]For PVT device, auto reset for recovery.\n", __func__);
+		printk(KERN_INFO "[TP] For PVT device, auto reset for recovery.\n");
 		ts->reset();
 		if (!i2c_cy8c_read(ts->client, 0x00, buf, 2))
 			printk(KERN_INFO "%s: %x, %x\n", __func__, buf[0], buf[1]);
@@ -1430,24 +1192,15 @@ static int cy8c_ts_resume(struct i2c_client *client)
 
 	if ((buf[1] & 0x10) == 0x10)
 		if (cy8c_init_panel(ts) < 0)
-			printk(KERN_ERR "TOUCH_ERR: %s init failed\n",
+			printk(KERN_ERR "[TP] TOUCH_ERR: %s init failed\n",
 			__func__);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	if (s2w_switch == 0) {
-#endif
+
 		i2c_cy8c_write_byte_data(ts->client, 0x00, (buf[0] & 0x8F) | 0x04);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	}
-#endif
+
 	ts->unlock_page = 1;
 
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	if (s2w_switch == 0) {
-#endif
 		enable_irq(client->irq);
-#ifdef CONFIG_TOUCHSCREEN_CYPRESS_SWEEP2WAKE
-	}
-#endif
+
 	return 0;
 }
 
@@ -1488,7 +1241,8 @@ static struct i2c_driver cy8c_ts_driver = {
 
 static int __devinit cy8c_ts_init(void)
 {
-	printk(KERN_INFO "%s: enter\n", __func__);
+	printk(KERN_INFO "[TP] %s: enter\n", __func__);
+
 	return i2c_add_driver(&cy8c_ts_driver);
 }
 
