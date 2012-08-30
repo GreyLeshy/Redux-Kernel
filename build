@@ -4,6 +4,7 @@ rm -f error.log
 BASE=$PWD
 export ARCH=arm
 export CROSS_COMPILE=arm-eabi-
+export PATH=$PATH:$BASE/toolchain/bin
 
 echo "" | tee -a build.log
 echo "/***************************/" | tee -a build.log
