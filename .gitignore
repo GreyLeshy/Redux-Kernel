@@ -33,6 +33,7 @@ modules.builtin
 *.patch
 *.gcno
 *.patch
+*.zip
 
 #
 # Top-level generic files
@@ -80,3 +81,11 @@ GTAGS
 *.orig
 *~
 \#*#
+
+# log files
+build.log
+error.log
+
+#AnyKernel
+zImage
+
