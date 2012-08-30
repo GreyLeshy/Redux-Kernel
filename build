@@ -1,0 +1,24 @@
+echo ""
+echo "XS-ICS Build Script"
+echo "by l0st.prophet"
+echo ""
+echo "Cleaning old build files..."
+make clean mrproper
+echo "Setting XS defconfig..."
+make XS_defconfig
+echo "Build zImage & modules"
+make -j`grep 'processor' /proc/cpuinfo | wc -l`
+echo ""
+echo "Build Complete."
+echo ""
+echo "Copying required files.."
+rm -f ~/Android/Kernel/XS-ICS/kernel/zImage
+cp arch/arm/boot/zImage ~/Android/Kernel/XS-ICS/kernel/
+rm -f ~/Android/Kernel/XS-ICS/system/lib/modules/bcm4329.ko
+cp drivers/net/wireless/bcm4329_248/bcm4329.ko ~/Android/Kernel/XS-ICS/system/lib/modules/
+echo "Creating flashable ZIP..."
+cd ~/Android/Kernel/XS-ICS/
+zip -r XS-ICS *
+cp ~/Android/Kernel/XS-ICS/XS-ICS.zip ~/share
+echo ""
+echo "Finshed"
