@@ -6243,28 +6243,11 @@ wl_iw_set_pmksa(
 				if (i == 0)
 				{
 					bcopy(&pmkid_list.foo[0].BSSID,
-<<<<<<< HEAD
 					&pmkid_list.pmkids.pmkid[i].BSSID,
 					ETHER_ADDR_LEN);
 					bcopy(&pmkid_list.foo[0].PMKID,
 					&pmkid_list.pmkids.pmkid[i].PMKID,
-=======
-						&pmkid_list.pmkids.pmkid[i].BSSID,
-						ETHER_ADDR_LEN);
-					bcopy(&pmkid_list.foo[0].PMKID,
-						&pmkid_list.pmkids.pmkid[i].PMKID,
-						WPA2_PMKID_LEN);
-				}
-				else
-				{
-					bcopy(&pmkid_list.foo[i+1].BSSID,
-						&pmkid_list.foo[i].BSSID,
-						ETHER_ADDR_LEN);
-					bcopy(&pmkid_list.foo[i+1].PMKID,
- 						&pmkid_list.foo[i].PMKID,
->>>>>>> cde0eff... Linaro GCC Fix
 					WPA2_PMKID_LEN);
-				}
 			}
 				else
 				{
