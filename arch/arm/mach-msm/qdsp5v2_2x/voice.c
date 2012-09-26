@@ -687,6 +687,8 @@ static int voice_thread(void *data)
 						rc = voice_cmd_device_info(v);
 						rc = voice_cmd_acquire_done(v);
 						v->voc_state = VOICE_ACQUIRE;
+						broadcast_event(AUDDEV_EVT_VOICE_STATE_CHG,
+						VOICE_STATE_INCALL, SESSION_IGNORE);
 						pr_aud_info("voc_state -> VOICE_ACQUIRE\n");
 					} else {
 						pr_aud_info("start waiting for "
@@ -702,11 +704,15 @@ static int voice_thread(void *data)
 							atomic_dec(&v->rel_start_flag);
 							msm_snddev_withdraw_freq(0,
 								SNDDEV_CAP_TX, AUDDEV_CLNT_VOC);
+								broadcast_event(AUDDEV_EVT_VOICE_STATE_CHG,
+								VOICE_STATE_OFFCALL, SESSION_IGNORE);
 						} else {
 							voice_change_sample_rate(v);
 							rc = voice_cmd_device_info(v);
 							rc = voice_cmd_acquire_done(v);
 							v->voc_state = VOICE_ACQUIRE;
+							broadcast_event(AUDDEV_EVT_VOICE_STATE_CHG,
+							VOICE_STATE_INCALL, SESSION_IGNORE);
 							pr_aud_info("voc_state -> VOICE_ACQUIRE\n");
 						}
 					}
@@ -730,6 +736,8 @@ static int voice_thread(void *data)
 					pr_aud_info("voc_state -> VOICE_RELEASE\n");
 					msm_snddev_withdraw_freq(0, SNDDEV_CAP_TX,
 						AUDDEV_CLNT_VOC);
+						broadcast_event(AUDDEV_EVT_VOICE_STATE_CHG,
+						VOICE_STATE_OFFCALL,SESSION_IGNORE);
 				} else {
 					/* wait for the dev_state = RELEASE */
 					pr_aud_info("start waiting for "
@@ -746,6 +754,8 @@ static int voice_thread(void *data)
 							AUDDEV_CLNT_VOC);
 					}
 					v->voc_state = VOICE_RELEASE;
+					broadcast_event(AUDDEV_EVT_VOICE_STATE_CHG,
+					VOICE_STATE_OFFCALL,SESSION_IGNORE);
 				}
 				if (atomic_read(&v->rel_start_flag))
 					atomic_dec(&v->rel_start_flag);
@@ -754,6 +764,8 @@ static int voice_thread(void *data)
 				if (v->voc_state == VOICE_ACQUIRE) {
 					v->voc_state = VOICE_CHANGE;
 					pr_aud_info("voc_state -> VOICE_CHANGE\n");
+					broadcast_event(AUDDEV_EVT_VOICE_STATE_CHG,
+					VOICE_STATE_INCALL, SESSION_IGNORE);
 				} else
 					pr_aud_err("Get VOICE_CHANGE_START "
 					       "at wrong voc_state %d\n", v->voc_state);
