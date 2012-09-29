@@ -90,3 +90,5 @@ error.log
 #AnyKernel
 zImage
 
+# my debugging config
+debug_defconfig
