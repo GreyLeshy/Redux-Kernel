@@ -84,7 +84,7 @@ static unsigned long down_sample_time;
 /*
  * CPU freq will be increased if measured load > inc_cpu_load;
  */
-#define DEFAULT_INC_CPU_LOAD 60
+#define DEFAULT_INC_CPU_LOAD 90
 static unsigned long inc_cpu_load;
 
 /*
@@ -98,14 +98,14 @@ static unsigned long dec_cpu_load;
  * Increasing frequency table index
  * zero disables and causes to always jump straight to max frequency.
  */
-#define DEFAULT_PUMP_UP_STEP 0
+#define DEFAULT_PUMP_UP_STEP 4
 static unsigned long pump_up_step;
 
 /*
  * Decreasing frequency table index
  * zero disables and will calculate frequency according to load heuristic.
  */
-#define DEFAULT_PUMP_DOWN_STEP 0
+#define DEFAULT_PUMP_DOWN_STEP 1
 static unsigned long pump_down_step;
 
 /*
