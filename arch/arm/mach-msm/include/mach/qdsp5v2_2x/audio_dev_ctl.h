@@ -40,8 +40,8 @@
 #define VOICE_STATE_INVALID 0x0
 #define VOICE_STATE_INCALL 0x1
 #define VOICE_STATE_OFFCALL 0x2
-#define MAX_COPP_NODE_SUPPORTED 6	/*Are these 2*/
-#define MAX_AUDREC_SESSIONS 3		/*lines necessary?*/
+#define MAX_COPP_NODE_SUPPORTED 6
+#define MAX_AUDREC_SESSIONS 3
 
 #define REAL_STEREO_CHANNEL_MODE	9
 
@@ -200,6 +200,6 @@ int msm_get_voc_freq(int *tx_freq, int *rx_freq);
 int msm_snddev_get_enc_freq(int session_id);
 int msm_set_voice_vol(int dir, s32 volume);
 int msm_set_voice_mute(int dir, int mute);
-/*int msm_get_call_state(void);*/
+int msm_get_call_state(void);
 int msm_get_voice_state(void);
 #endif

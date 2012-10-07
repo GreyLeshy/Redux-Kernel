@@ -68,17 +68,17 @@ struct audio_routing_info {
 	signed int voice_rx_vol;
 	int tx_mute;
 	int rx_mute;
-	int voice_state;
+	int call_state;
 };
 
 static struct audio_routing_info routing_info;
 
-int msm_get_voice_state(void)
+int msm_get_call_state(void)
 {
-	pr_debug("voice state %d\n", routing_info.voice_state);
-	return routing_info.voice_state;
+	pr_debug("call state %d\n", routing_info.call_state);
+	return routing_info.call_state;
 }
-EXPORT_SYMBOL(msm_get_voice_state);
+EXPORT_SYMBOL(msm_get_call_state);
 
 int msm_set_voice_mute(int dir, int mute)
 {
@@ -785,9 +785,9 @@ void broadcast_event(u32 evt_id, u32 dev_id, u32 session_id)
 		memset(evt_payload, 0, sizeof(union auddev_evt_data));
 
 		if (evt_id == AUDDEV_EVT_START_VOICE)
-			routing_info.voice_state = 1;
+			routing_info.call_state = 1;
 		if (evt_id == AUDDEV_EVT_END_VOICE)
-			routing_info.voice_state = 0;
+			routing_info.call_state = 0;
 
 		if ((evt_id == AUDDEV_EVT_START_VOICE)
 			|| (evt_id == AUDDEV_EVT_END_VOICE))
