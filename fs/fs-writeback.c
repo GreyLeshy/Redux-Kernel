@@ -1037,12 +1037,6 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 			sb->s_op->dirty_inode(inode, flags);
 	}
 
-	/*
-	 * make sure that changes are seen by all cpus before we test i_state
-	 * -- mikulas
-	 */
-	smp_mb();
-
 	/* avoid the locking if we can */
 	if ((inode->i_state & flags) == flags)
 		return;
