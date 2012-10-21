@@ -44,6 +44,7 @@ config CPU_FREQ_STAT_DETAILS
 
 choice
 	prompt "Default CPUFreq governor"
+	default CPU_FREQ_DEFAULT_GOV_USERSPACE if CPU_FREQ_SA1100 || CPU_FREQ_SA1110
 	default CPU_FREQ_DEFAULT_GOV_PERFORMANCE
 	help
 		This option sets which CPUFreq governor shall be loaded at
@@ -78,6 +79,7 @@ config CPU_FREQ_DEFAULT_GOV_USERSPACE
 config CPU_FREQ_DEFAULT_GOV_ONDEMAND
 	bool "ondemand"
 	select CPU_FREQ_GOV_ONDEMAND
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'ondemand' as default. This allows
 		you to get a full dynamic frequency capable system by simply
@@ -89,6 +91,7 @@ config CPU_FREQ_DEFAULT_GOV_ONDEMAND
 config CPU_FREQ_DEFAULT_GOV_ONDEMANDX
 	bool "ondemandx"
 	select CPU_FREQ_GOV_ONDEMANDX
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'ondemand' as default. This allows
 		you to get a full dynamic frequency capable system by simply
@@ -111,6 +114,7 @@ config CPU_FREQ_DEFAULT_GOV_INTERACTIVEX
 config CPU_FREQ_DEFAULT_GOV_CONSERVATIVE
 	bool "conservative"
 	select CPU_FREQ_GOV_CONSERVATIVE
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'conservative' as default. This allows
 		you to get a full dynamic frequency capable system by simply
@@ -137,18 +141,21 @@ config CPU_FREQ_DEFAULT_GOV_SMARTASS2
 config CPU_FREQ_DEFAULT_GOV_BRAZILIANWAX
 	bool "brazilianwax"
 	select CPU_FREQ_GOV_BRAZILIANWAX
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'brazilianwax as default.
 
 config CPU_FREQ_DEFAULT_GOV_LAZY
 	bool "lazy"
 	select CPU_FREQ_GOV_LAZY
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'lazy' as default.
 
 config CPU_FREQ_DEFAULT_GOV_LAGFREE
 	bool "lagfree"
 	select CPU_FREQ_GOV_LAGFREE
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'lagfree' as default. This allows
 		you to get a full dynamic frequency capable system by simply
@@ -160,6 +167,7 @@ config CPU_FREQ_DEFAULT_GOV_LAGFREE
 config CPU_FREQ_DEFAULT_GOV_SAVAGEDZEN
 	bool "savagedzen"	
 	select CPU_FREQ_GOV_SAVAGEDZEN
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'savagedzen' as default.	
 
@@ -172,18 +180,21 @@ config CPU_FREQ_DEFAULT_GOV_LIONHEART
 config CPU_FREQ_DEFAULT_GOV_LULZACTIVE
 	bool "lulzactive"
 	select CPU_FREQ_GOV_LULZACTIVE
+	select CPU_FREQ_GOV_INTERACTIVE
 	help
 		Use the CPUFreq governor 'lulzactive' as default.
 
 config CPU_FREQ_DEFAULT_GOV_INTELLIDEMAND
 	bool "intellidemand"
 	select CPU_FREQ_GOV_INTELLIDEMAND
+	select CPU_FREQ_GOV_PERFORMANCE
 	help
 		Use the CPUFreq governor 'intellidemand' as default.
 
 
 config CPU_FREQ_DEFAULT_GOV_SCARY
 	bool "scary"
+	select CPU_FREQ_GOV_SCARY
 	select CPU_FREQ_GOV_SCARY
 	help
 		Use the CPUFreq governor 'scary' as default.	
