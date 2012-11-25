@@ -27,6 +27,12 @@ DHDCFLAGS = -DLINUX -DBCMDRIVER -DBCMDONGLEHOST -DUNRELEASEDCHIP -DBCMDMA32  \
 	# CFG 80211 and P2P compile flag
 	#-DWL_CFG80211 -DWLP2P -DWL_COMPAT_WIRELESS \
 
+ifeq "$(shell $(CC) --version | grep gcc | sed 's/^.* //g')" "4.6.3"
+# 4.6.3 toolchain has many false positives as above
+DHDCFLAGS += -Wno-error=unused-but-set-variable
+DHDCFLAGS += -Wno-error=array-bounds
+endif
+
 #ifdef P2P
 DHDCFLAGS += -DWL_CFG80211 -DWLP2P -DWL_COMPAT_WIRELESS 
 #endif

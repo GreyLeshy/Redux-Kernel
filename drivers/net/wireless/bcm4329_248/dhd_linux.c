@@ -1239,7 +1239,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt)
 	struct sk_buff *skb;
 	uchar *eth;
 	uint len;
-	void * data, *pnext, *save_pktbuf;
+	void * data, *pnext;
 	int i;
 	dhd_if_t *ifp;
 	wl_event_msg_t event;
@@ -1259,8 +1259,6 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt)
 			DHD_ERROR(("%s: module removed. skip rx frame\n", __FUNCTION__));
 		return;
 	}
-
-	save_pktbuf = pktbuf;
 
 	for (i = 0; pktbuf && i < numpkt; i++, pktbuf = pnext) {
 

@@ -1733,7 +1733,7 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 	struct sk_buff *skb;
 	uchar *eth;
 	uint len;
-	void *data = NULL, *pnext = NULL, *save_pktbuf;
+	void *data = NULL, *pnext = NULL;
 	int i;
 	dhd_if_t *ifp;
 	wl_event_msg_t event;
@@ -1758,8 +1758,6 @@ dhd_rx_frame(dhd_pub_t *dhdp, int ifidx, void *pktbuf, int numpkt, uint8 chan)
 		return;
 	}
 /* HTC_CSP_END */
-
-	save_pktbuf = pktbuf;
 
 	for (i = 0; pktbuf && i < numpkt; i++, pktbuf = pnext) {
 		struct ether_header *eh;
